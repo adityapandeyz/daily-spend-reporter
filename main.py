@@ -1,9 +1,11 @@
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from mangum import Mangum
 import boto3
 from database import engine
 import models
 from database import SessionLocal
+import schemas
+from sqlalchemy.orm import Session
 
 app = FastAPI(title="Daily Spend Reporter")
 
@@ -38,6 +40,23 @@ def get_db():
         yield db
     finally:
         db.close()
+
+@app.post("/spend/")
+def create_spend_entry(spend: schemas.SpendCreate, db: SessionLocal = Depends(get_db)):
+    db_entry = models.SpendEntry(
+        amount=spend.amount,
+        category=spend.category,
+        description=spend.description
+    )
+    db.add(db_entry)
+    db.commit()
+    db.refresh(db_entry)
+    return db_entry
+
+@app.get("/spend/")
+def read_spend_entries(db: SessionLocal = Depends(get_db)):
+    entries = db.query(models.SpendEntry).all()
+    return entries
 
 # The Lambda adapter
 handler = Mangum(app)
