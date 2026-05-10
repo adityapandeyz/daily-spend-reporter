@@ -6,6 +6,7 @@ import schemas
 from database import SessionLocal, engine
 from sqlalchemy import func
 from sqlalchemy.orm import Session
+from reporter import deliver_report
 
 app = FastAPI(
     title="Daily Spend Reporter",
@@ -14,6 +15,9 @@ app = FastAPI(
 )
 
 models.Base.metadata.create_all(bind=engine)
+
+# This handles the standard web requests
+asgi_handler = Mangum(app)
 
 @app.get("/")
 def health_check():
@@ -93,5 +97,29 @@ def category_totals_today(db: Session = Depends(get_db)):
         ]
     }
 
-# The Lambda adapter
-handler = Mangum(app)
+@app.post('/spend/report/deliver')
+def deliver_spend_report():
+    """Generate and deliver the spend report to S3 and SNS"""
+    try:
+        result = deliver_report()
+        return result
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to deliver report: {str(e)}"
+        )
+
+# Lambda handler that routes between EventBridge and HTTP requests
+def handler(event, context):
+    """
+    This is the main entry point for AWS Lambda.
+    It routes EventBridge scheduled events to deliver_report()
+    and HTTP requests to the FastAPI app.
+    """
+    # Check if the event is from EventBridge alarm clock ⏰
+    if event.get("source") == "aws.events":
+        print("EventBridge trigger detected. Running report...")
+        return deliver_spend_report()
+    
+    # Otherwise, pass it to FastAPI/Mangum as a normal web request 🌐
+    return asgi_handler(event, context)

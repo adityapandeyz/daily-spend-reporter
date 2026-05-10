@@ -13,8 +13,8 @@ FROM public.ecr.aws/lambda/python:3.13
 # Copy installed packages from builder
 COPY --from=builder ${LAMBDA_TASK_ROOT} ${LAMBDA_TASK_ROOT}/
 
-# Copy application code
-COPY main.py models.py schemas.py database.py ${LAMBDA_TASK_ROOT}/
+# Copy all application code
+COPY *.py ${LAMBDA_TASK_ROOT}/
 
 # Set the CMD to your handler
 CMD ["main.handler"]
